@@ -1,0 +1,8 @@
+android
+ios
+linux
+macos
+node_modules
+windows
+build
+electroshare/lib/firebase_options.dart
