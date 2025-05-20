@@ -31,7 +31,7 @@ class _AddScreenState extends State<AddScreen> {
   bool _isSearching = false;
   List<Map<String, dynamic>> _searchResults = [];
 
-  final List<String> categories = ['Kitchen', 'Garden'];
+  final List<String> categories = ['Cleaning', 'Garden', 'Kitchen'];
   final FocusNode _descriptionFocus = FocusNode();
 
   @override

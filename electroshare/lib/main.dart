@@ -8,6 +8,9 @@ import 'package:electroshare/screens/login_screen.dart';
 import 'package:electroshare/screens/home_screen.dart';
 import 'package:electroshare/screens/add_screen.dart';
 import 'package:electroshare/screens/my_devices.dart';
+import 'package:electroshare/screens/categories.dart';
+import 'package:electroshare/screens/rent_screen.dart';
+import 'package:electroshare/screens/rental_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,6 +40,8 @@ class GHFlutterApp extends StatelessWidget {
         '/home': (context) => const HomeScreen(),
         '/my-devices': (context) => const MyDevicesScreen(),
         '/add': (context) => const AddScreen(),
+        '/categories': (context) => const CategoriesScreen(),
+        '/rental': (context) => const RentalScreen(),
       },
     );
   }

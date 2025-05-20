@@ -14,7 +14,10 @@ class MyDevicesScreen extends StatefulWidget {
 
 class _MyDevicesScreenState extends State<MyDevicesScreen> {
   List<Map<String, dynamic>> devicesList = [];
+  List<Map<String, dynamic>> filteredDevicesList = [];
   bool isLoading = true;
+  String? selectedCategory;
+  List<String> availableCategories = [];
 
   @override
   void initState() {
@@ -38,16 +41,21 @@ class _MyDevicesScreenState extends State<MyDevicesScreen> {
           await devices.where('userId', isEqualTo: currentUser.uid).get();
 
       List<Map<String, dynamic>> loadedDevices = [];
+      Set<String> categories = {};
 
       for (var doc in snapshot.docs) {
         final data = doc.data();
+        final category = data['category'] ?? 'Uncategorized';
+
+        categories.add(category);
+
         loadedDevices.add({
           'id': doc.id,
           'title': data['title'] ?? 'No Title',
           'description': data['description'] ?? 'No Description',
           'price': data['price'] ?? 0.0,
           'imageBase64': data['image'] ?? '',
-          'category': data['category'] ?? 'Uncategorized',
+          'category': category,
           'createdAt': data['createdAt'] ?? Timestamp.now(),
         });
       }
@@ -60,6 +68,8 @@ class _MyDevicesScreenState extends State<MyDevicesScreen> {
 
       setState(() {
         devicesList = loadedDevices;
+        filteredDevicesList = loadedDevices;
+        availableCategories = categories.toList()..sort();
         isLoading = false;
       });
     } catch (error) {
@@ -75,6 +85,88 @@ class _MyDevicesScreenState extends State<MyDevicesScreen> {
         ),
       );
     }
+  }
+
+  void applyFilters() {
+    if (selectedCategory == null) {
+      setState(() {
+        filteredDevicesList = List.from(devicesList);
+      });
+    } else {
+      setState(() {
+        filteredDevicesList =
+            devicesList
+                .where((device) => device['category'] == selectedCategory)
+                .toList();
+      });
+    }
+  }
+
+  void clearFilters() {
+    setState(() {
+      selectedCategory = null;
+      filteredDevicesList = List.from(devicesList);
+    });
+  }
+
+  void showFilterDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Filter by Category'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RadioListTile<String?>(
+                  title: const Text('All Categories'),
+                  value: null,
+                  groupValue: selectedCategory,
+                  onChanged: (value) {
+                    setState(() {
+                      selectedCategory = value;
+                    });
+                    Navigator.pop(context);
+                    applyFilters();
+                  },
+                ),
+                ...availableCategories.map((category) {
+                  return RadioListTile<String>(
+                    title: Text(category),
+                    value: category,
+                    groupValue: selectedCategory,
+                    onChanged: (value) {
+                      setState(() {
+                        selectedCategory = value;
+                      });
+                      Navigator.pop(context);
+                      applyFilters();
+                    },
+                  );
+                }).toList(),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                clearFilters();
+              },
+              child: const Text('Clear Filter'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> deleteDevice(String deviceId) async {
@@ -118,6 +210,11 @@ class _MyDevicesScreenState extends State<MyDevicesScreen> {
         centerTitle: true,
         actions: [
           IconButton(
+            icon: const Icon(Icons.filter_list),
+            onPressed: availableCategories.isEmpty ? null : showFilterDialog,
+            tooltip: 'Filter by Category',
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: fetchMyDevices,
             tooltip: 'Refresh',
@@ -130,18 +227,76 @@ class _MyDevicesScreenState extends State<MyDevicesScreen> {
               ? const Center(child: CircularProgressIndicator())
               : RefreshIndicator(
                 onRefresh: fetchMyDevices,
-                child:
-                    devicesList.isEmpty
-                        ? _buildEmptyState(context)
-                        : Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: MyDevicesGrid(
-                            devices: devicesList,
-                            onDelete: deleteDevice,
-                            onEdit: editDevice,
-                          ),
+                child: Column(
+                  children: [
+                    if (selectedCategory != null)
+                      Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Row(
+                          children: [
+                            Chip(
+                              label: Text('Category: $selectedCategory'),
+                              deleteIcon: const Icon(Icons.close, size: 18),
+                              onDeleted: () {
+                                clearFilters();
+                              },
+                            ),
+                          ],
                         ),
+                      ),
+
+                    Expanded(
+                      child:
+                          devicesList.isEmpty
+                              ? _buildEmptyState(context)
+                              : filteredDevicesList.isEmpty
+                              ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.search_off,
+                                      size: 60,
+                                      color: Colors.grey[400],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      "No devices in category '$selectedCategory'",
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    TextButton.icon(
+                                      onPressed: clearFilters,
+                                      icon: const Icon(Icons.filter_list_off),
+                                      label: const Text("Clear Filter"),
+                                    ),
+                                  ],
+                                ),
+                              )
+                              : Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: MyDevicesGrid(
+                                  devices: filteredDevicesList,
+                                  onDelete: deleteDevice,
+                                  onEdit: editDevice,
+                                ),
+                              ),
+                    ),
+                  ],
+                ),
               ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.pushNamed(context, '/add').then((_) {
+            fetchMyDevices();
+          });
+        },
+        child: const Icon(Icons.add),
+        tooltip: 'Add New Device',
+      ),
     );
   }
 
@@ -275,149 +430,129 @@ class MyDeviceCard extends StatelessWidget {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Column(
+            padding: const EdgeInsets.only(
+              left: 12.0,
+              right: 12.0,
+              top: 12.0,
+              bottom: 4.0,
+            ),
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              device['title'],
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.withAlpha(26),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: Colors.blue.withAlpha(128),
-                              ),
-                            ),
-                            child: Text(
-                              device['category'] ?? 'Uncategorized',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: const Color.fromARGB(255, 25, 118, 210),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ],
+                Expanded(
+                  child: Row(
+                    children: [
+                      Text(
+                        device['title'],
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      formattedPrice,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        color: Colors.green,
-                      ),
-                    ),
-                  ],
+                      if (device['category'] != null &&
+                          device['category'].toString().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8.0),
+                          child: Text(
+                            '• ${device['category']}',
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-
-                const SizedBox(height: 8),
                 Text(
-                  device['description'],
-                  style: const TextStyle(fontSize: 14),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-
-                const SizedBox(height: 6),
-
-                SizedBox(
-                  height: 323,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Container(
-                      width: double.infinity,
-                      color: Colors.grey.shade200,
-                      child: imageWidget,
-                    ),
+                  formattedPrice,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: Colors.green,
                   ),
                 ),
               ],
             ),
           ),
 
-          // Edit and delete buttons overlay
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Row(
-              children: [
-                // Edit button
-                Material(
-                  color: Colors.transparent,
-                  child: IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.blue),
-                    onPressed: onEdit,
-                    tooltip: 'Edit',
-                    iconSize: 20,
-                    padding: const EdgeInsets.all(8),
-                    constraints: const BoxConstraints(),
-                  ),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 4.0,
+            ),
+            child: Text(
+              device['description'],
+              style: const TextStyle(fontSize: 14),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: double.infinity,
+                  color: Colors.grey.shade200,
+                  child: imageWidget,
                 ),
-                // Delete button
-                Material(
-                  color: Colors.transparent,
-                  child: IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () {
-                      // Show confirmation dialog
-                      showDialog(
-                        context: context,
-                        builder:
-                            (context) => AlertDialog(
-                              title: const Text('Delete Device?'),
-                              content: Text(
-                                'Are you sure you want to delete "${device['title']}"? This action cannot be undone.',
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('CANCEL'),
-                                ),
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.pop(context);
-                                    onDelete();
-                                  },
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Colors.red,
-                                  ),
-                                  child: const Text('DELETE'),
-                                ),
-                              ],
+              ),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.edit, color: Colors.blue),
+                  onPressed: onEdit,
+                  tooltip: 'Edit',
+                  iconSize: 20,
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder:
+                          (context) => AlertDialog(
+                            title: const Text('Delete Device?'),
+                            content: Text(
+                              'Are you sure you want to delete "${device['title']}"? This action cannot be undone.',
                             ),
-                      );
-                    },
-                    tooltip: 'Delete',
-                    iconSize: 20,
-                    padding: const EdgeInsets.all(8),
-                    constraints: const BoxConstraints(),
-                  ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('CANCEL'),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  onDelete();
+                                },
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.red,
+                                ),
+                                child: const Text('DELETE'),
+                              ),
+                            ],
+                          ),
+                    );
+                  },
+                  tooltip: 'Delete',
+                  iconSize: 20,
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(),
                 ),
               ],
             ),

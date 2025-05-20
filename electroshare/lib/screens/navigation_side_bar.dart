@@ -102,34 +102,12 @@ class NavigationSideBar extends StatelessWidget {
                   selected: ModalRoute.of(context)?.settings.name == '/add',
                 ),
                 NavItem(
-                  icon: Icons.history,
-                  title: 'Rental History',
-                  route: '/history',
-                  selected: ModalRoute.of(context)?.settings.name == '/history',
+                  icon: Icons.schedule,
+                  title: 'Rental',
+                  route: '/rental',
+                  selected: ModalRoute.of(context)?.settings.name == '/rental',
                 ),
 
-                const Divider(),
-
-                NavItem(
-                  icon: Icons.person,
-                  title: 'My Profile',
-                  route: '/profile',
-                  selected: ModalRoute.of(context)?.settings.name == '/profile',
-                ),
-                NavItem(
-                  icon: Icons.settings,
-                  title: 'Settings',
-                  route: '/settings',
-                  selected:
-                      ModalRoute.of(context)?.settings.name == '/settings',
-                ),
-
-                NavItem(
-                  icon: Icons.help_outline,
-                  title: 'Help & Support',
-                  route: '/help',
-                  selected: ModalRoute.of(context)?.settings.name == '/help',
-                ),
                 const Divider(),
 
                 ListTile(
@@ -198,7 +176,6 @@ class NavigationSideBar extends StatelessWidget {
   }
 }
 
-// Helper widget for navigation items
 class NavItem extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -264,7 +241,7 @@ class NavItem extends StatelessWidget {
                 )
                 : null,
         onTap: () {
-          Navigator.pop(context); // Close drawer
+          Navigator.pop(context);
           if (route != ModalRoute.of(context)?.settings.name) {
             Navigator.pushReplacementNamed(context, route);
           }
