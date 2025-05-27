@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:electroshare/screens/rent_screen.dart';
+import 'package:electroshare/screens/map_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -101,14 +102,14 @@ class _HomeScreenState extends State<HomeScreen> {
       if (_mounted) {
         setState(() {
           devicesList = loadedDevices;
-          filteredDevicesList = List.from(
-            loadedDevices,
-          ); // Initialize with all devices
+          filteredDevicesList = List.from(loadedDevices);
           isLoading = false;
         });
       }
     } catch (error) {
-      print("Failed to fetch devices: $error");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to fetch devices: $error')),
+      );
       if (_mounted) {
         setState(() {
           isLoading = false;
@@ -157,7 +158,6 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      // Get current position
       Position position = await Geolocator.getCurrentPosition();
 
       if (_mounted) {
@@ -167,7 +167,6 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } catch (e) {
-      print("Error getting location: $e");
       if (_mounted) {
         setState(() {
           isLocationLoading = false;
@@ -180,10 +179,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   double calculateDistance(LatLng point1, LatLng point2) {
-    // Fixed: Make sure the calculation returns distance in kilometers
     const Distance distance = Distance();
     final double meters = distance.as(LengthUnit.Meter, point1, point2);
-    return meters / 1000; // Convert meters to kilometers
+    return meters / 1000;
   }
 
   void applyFilters() {
@@ -191,7 +189,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     List<Map<String, dynamic>> filtered = List.from(devicesList);
 
-    // Apply category filter
     if (selectedCategory != null && selectedCategory!.isNotEmpty) {
       filtered =
           filtered
@@ -199,22 +196,28 @@ class _HomeScreenState extends State<HomeScreen> {
               .toList();
     }
 
-    // Apply distance filter
-    if (selectedDistance != null && userLocation != null) {
+    if (selectedDistance != null &&
+        (userAddress != null || userLocation != null)) {
+      final referenceLocation = userAddress ?? userLocation!;
+
       filtered =
           filtered.where((device) {
-            // Fixed: Properly check if the device has a valid location
             final deviceLocation = device['location'];
             if (deviceLocation == null || !(deviceLocation is LatLng)) {
               return false;
             }
 
-            // Calculate the distance
-            double distance = calculateDistance(userLocation!, deviceLocation);
-
-            // For debugging
-            print('Device: ${device['title']}, Distance: $distance km');
-
+            double distance = calculateDistance(
+              referenceLocation,
+              deviceLocation,
+            );
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Device: ${device['title']}, Distance: $distance km',
+                ),
+              ),
+            );
             return distance <= selectedDistance!;
           }).toList();
     }
@@ -231,6 +234,7 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         selectedCategory = null;
         selectedDistance = null;
+        userAddress = null;
         filteredDevicesList = List.from(devicesList);
       });
     }
@@ -249,7 +253,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Category Filter
                       const Text(
                         'Category:',
                         style: TextStyle(fontWeight: FontWeight.bold),
@@ -286,73 +289,172 @@ class _HomeScreenState extends State<HomeScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Distance Filter
                       const Text(
                         'Distance:',
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
 
-                      if (userLocation == null)
-                        ElevatedButton.icon(
-                          onPressed: () async {
-                            Navigator.of(
-                              context,
-                            ).pop(); // Close dialog temporarily
-                            await getUserLocation();
-                            if (_mounted) {
-                              showFilterDialog();
-                            }
-                          },
-                          icon:
-                              isLocationLoading
-                                  ? const SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                Navigator.of(context).pop();
+                                await getUserLocation();
+                                if (_mounted) {
+                                  showFilterDialog();
+                                }
+                              },
+                              icon:
+                                  isLocationLoading
+                                      ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                      : const Icon(Icons.my_location),
+                              label: const Text('Current'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor:
+                                    userLocation != null && userAddress == null
+                                        ? Colors.blue
+                                        : null,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                Navigator.of(context).pop();
+
+                                final result =
+                                    await Navigator.push<Map<String, dynamic>>(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder:
+                                            (context) => MapScreen(
+                                              initialLocation:
+                                                  userAddress ?? userLocation,
+                                              initialAddress:
+                                                  userAddress != null
+                                                      ? 'Selected from map'
+                                                      : null,
+                                            ),
+                                      ),
+                                    );
+
+                                if (result != null && _mounted) {
+                                  setState(() {
+                                    userAddress = result['location'] as LatLng?;
+                                  });
+                                  if (_mounted) {
+                                    showFilterDialog();
+                                  }
+                                } else if (_mounted) {
+                                  showFilterDialog();
+                                }
+                              },
+                              icon: const Icon(Icons.map),
+                              label: const Text('Map'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor:
+                                    userAddress != null ? Colors.blue : null,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      if (userLocation != null || userAddress != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.blue.shade200),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    userAddress != null
+                                        ? Icons.map
+                                        : Icons.my_location,
+                                    size: 16,
+                                    color: Colors.blue,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    userAddress != null
+                                        ? 'Selected from map:'
+                                        : 'Current location:',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 12,
                                     ),
-                                  )
-                                  : const Icon(Icons.location_on),
-                          label: const Text('Use my location'),
-                        )
-                      else
-                        Column(
-                          children: [
-                            Text(
-                              'Your location: ${userLocation!.latitude.toStringAsFixed(4)}, ${userLocation!.longitude.toStringAsFixed(4)}',
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                FilterChip(
-                                  label: const Text('Any distance'),
-                                  selected: selectedDistance == null,
-                                  onSelected: (selected) {
-                                    if (selected) {
-                                      setDialogState(() {
-                                        selectedDistance = null;
-                                      });
-                                    }
-                                  },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                userAddress != null
+                                    ? '${userAddress!.latitude.toStringAsFixed(4)}, ${userAddress!.longitude.toStringAsFixed(4)}'
+                                    : '${userLocation!.latitude.toStringAsFixed(4)}, ${userLocation!.longitude.toStringAsFixed(4)}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey,
                                 ),
-                                ...distanceOptions.map((distance) {
-                                  return FilterChip(
-                                    label: Text('$distance km'),
-                                    selected: selectedDistance == distance,
-                                    onSelected: (selected) {
-                                      setDialogState(() {
-                                        selectedDistance =
-                                            selected ? distance : null;
-                                      });
-                                    },
-                                  );
-                                }).toList(),
-                              ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilterChip(
+                              label: const Text('Any distance'),
+                              selected: selectedDistance == null,
+                              onSelected: (selected) {
+                                if (selected) {
+                                  setDialogState(() {
+                                    selectedDistance = null;
+                                  });
+                                }
+                              },
                             ),
+                            ...distanceOptions.map((distance) {
+                              return FilterChip(
+                                label: Text('$distance km'),
+                                selected: selectedDistance == distance,
+                                onSelected: (selected) {
+                                  setDialogState(() {
+                                    selectedDistance =
+                                        selected ? distance : null;
+                                  });
+                                },
+                              );
+                            }).toList(),
                           ],
+                        ),
+                      ] else
+                        const Text(
+                          'Select a location to filter by distance',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                            fontStyle: FontStyle.italic,
+                          ),
                         ),
                     ],
                   ),
@@ -428,10 +530,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               if (selectedDistance != null)
                                 Chip(
-                                  label: Text('Distance: $selectedDistance km'),
+                                  label: Text(
+                                    'Distance: $selectedDistance km ${userAddress != null ? "(Map)" : "(Current)"}',
+                                  ),
                                   onDeleted: () {
                                     setState(() {
                                       selectedDistance = null;
+                                      userAddress = null;
                                       applyFilters();
                                     });
                                   },
@@ -445,8 +550,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                         ),
-
-                      // Device grid
                       Expanded(child: DeviceGrid(devices: displayDevices)),
                     ],
                   ),
@@ -523,7 +626,9 @@ class DeviceCard extends StatelessWidget {
           },
         );
       } catch (e) {
-        print('Error decoding image: $e');
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error decoding image: $e')));
       }
     }
 

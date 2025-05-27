@@ -3,6 +3,7 @@ import 'package:electroshare/screens/navigation_side_bar.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // Voeg deze import toe
 
 class RentScreen extends StatefulWidget {
   final String deviceId;
@@ -37,6 +38,22 @@ class _RentScreenState extends State<RentScreen> {
     _fetchDeviceData();
   }
 
+  // Aangepaste functie om rental data te parsen
+  List<DateTime> parseRentalDates(dynamic list) {
+    if (list is List) {
+      return list.map<DateTime>((entry) {
+        if (entry is Map<String, dynamic> && entry['date'] is Timestamp) {
+          return entry['date'].toDate();
+        } else if (entry is Timestamp) {
+          // Backwards compatibility voor oude data
+          return entry.toDate();
+        }
+        return DateTime.now();
+      }).toList();
+    }
+    return [];
+  }
+
   List<DateTime> parseTimestamps(dynamic list) {
     if (list is List) {
       return list.map<DateTime>((entry) {
@@ -65,14 +82,19 @@ class _RentScreenState extends State<RentScreen> {
 
       final data = doc.data()!;
 
+      final List<DateTime> availabilityDates = parseTimestamps(
+        data['availability'] ?? [],
+      );
+      final List<DateTime> rentedDates = parseRentalDates(data['rented'] ?? []);
+
       setState(() {
         _deviceData = {
           'id': doc.id,
           'title': data['title'] ?? 'No Title',
           'description': data['description'] ?? 'No Description',
           'price': data['price'] ?? 0.0,
-          'availability': parseTimestamps(data['availability'] ?? []),
-          'rented': parseTimestamps(data['rented'] ?? []),
+          'availability': availabilityDates,
+          'rented': rentedDates,
         };
         _isLoading = false;
       });
@@ -100,33 +122,67 @@ class _RentScreenState extends State<RentScreen> {
       return;
     }
 
+    // Controleer of gebruiker is ingelogd
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You must be logged in to rent a device'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
-      // Get the current rented dates
-      final currentRented = await FirebaseFirestore.instance
-          .collection('devices')
-          .doc(widget.deviceId)
-          .get()
-          .then((doc) => doc.data()?['rented'] ?? []);
+      final deviceDoc =
+          await FirebaseFirestore.instance
+              .collection('devices')
+              .doc(widget.deviceId)
+              .get();
 
-      // Get current availability dates
-      final currentAvailability = await FirebaseFirestore.instance
-          .collection('devices')
-          .doc(widget.deviceId)
-          .get()
-          .then((doc) => doc.data()?['availability'] ?? []);
+      final currentRentedData = deviceDoc.data()?['rented'] ?? [];
+      final currentAvailability = deviceDoc.data()?['availability'] ?? [];
 
-      final List<DateTime> existingRentedDates = parseTimestamps(currentRented);
+      // Parse bestaande rental data
+      List<Map<String, dynamic>> existingRentals = [];
+      if (currentRentedData is List) {
+        for (var entry in currentRentedData) {
+          if (entry is Map<String, dynamic>) {
+            existingRentals.add(entry);
+          } else if (entry is Timestamp) {
+            // Backwards compatibility: converteer oude timestamps naar nieuwe structuur
+            existingRentals.add({
+              'date': entry,
+              'userId': 'unknown', // Of een default waarde
+            });
+          }
+        }
+      }
+
       final List<DateTime> existingAvailabilityDates = parseTimestamps(
         currentAvailability,
       );
 
-      final allRentedDates =
-          {...existingRentedDates, ..._selectedRentalDates}.toList();
-      final rentedTimestamps =
-          allRentedDates.map((date) => Timestamp.fromDate(date)).toList();
+      // Maak nieuwe rental entries aan met userId
+      final newRentals =
+          _selectedRentalDates
+              .map(
+                (date) => {
+                  'date': Timestamp.fromDate(date),
+                  'userId': currentUser.uid,
+                  'rentedAt':
+                      Timestamp.now(), // Optioneel: wanneer het gerent werd
+                },
+              )
+              .toList();
 
+      // Combineer bestaande en nieuwe rentals
+      final allRentals = [...existingRentals, ...newRentals];
+
+      // Update availability (verwijder geselecteerde datums)
       final updatedAvailabilityDates =
           existingAvailabilityDates
               .where(
@@ -139,11 +195,12 @@ class _RentScreenState extends State<RentScreen> {
               .map((date) => Timestamp.fromDate(date))
               .toList();
 
+      // Update Firestore
       await FirebaseFirestore.instance
           .collection('devices')
           .doc(widget.deviceId)
           .update({
-            'rented': rentedTimestamps,
+            'rented': allRentals,
             'availability': availabilityTimestamps,
           });
 
@@ -157,7 +214,17 @@ class _RentScreenState extends State<RentScreen> {
 
         setState(() {
           _selectedRentalDates = {};
-          _deviceData['rented'] = allRentedDates;
+          // Update local data
+          final List<DateTime> updatedRentedDates =
+              allRentals
+                  .map<DateTime>(
+                    (rental) =>
+                        rental['date'] is Timestamp
+                            ? rental['date'].toDate()
+                            : DateTime.now(),
+                  )
+                  .toList();
+          _deviceData['rented'] = updatedRentedDates;
           _deviceData['availability'] = updatedAvailabilityDates;
         });
       }
@@ -179,10 +246,11 @@ class _RentScreenState extends State<RentScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final List<DateTime> availabilityDates = _deviceData['availability'] ?? [];
-    final List<DateTime> rentedDates = _deviceData['rented'] ?? [];
+    final List<DateTime> availabilityDates =
+        (_deviceData['availability'] as List<DateTime>?) ?? <DateTime>[];
+    final List<DateTime> rentedDates =
+        (_deviceData['rented'] as List<DateTime>?) ?? <DateTime>[];
 
-    // Format price for display
     final String priceDisplay =
         _deviceData['price'] != null
             ? '€${(_deviceData['price'] is double) ? _deviceData['price'].toStringAsFixed(2) : _deviceData['price']}'
@@ -237,7 +305,6 @@ class _RentScreenState extends State<RentScreen> {
                         });
                       },
                       selectedDayPredicate: (day) {
-                        // This needs to return true for days that should be marked as selected
                         return _selectedRentalDates.any(
                           (d) => isSameDay(d, day),
                         );
@@ -250,7 +317,6 @@ class _RentScreenState extends State<RentScreen> {
                           12,
                         );
 
-                        // Check if day is available (not rented)
                         final isAvailable = availabilityDates.any(
                           (d) => isSameDay(d, normalizedDay),
                         );
@@ -261,7 +327,6 @@ class _RentScreenState extends State<RentScreen> {
                         setState(() {
                           _focusedDay = focusedDay;
 
-                          // Only allow selection if the day is available and not rented
                           if (isAvailable && !isRented) {
                             if (_selectedRentalDates.any(
                               (d) => isSameDay(d, normalizedDay),
@@ -320,14 +385,12 @@ class _RentScreenState extends State<RentScreen> {
                           );
                         },
                         markerBuilder: (context, day, events) {
-                          // You can add markers here if needed
                           return null;
                         },
                       ),
                       calendarStyle: const CalendarStyle(
                         outsideDaysVisible: false,
                         weekendTextStyle: TextStyle(color: Colors.red),
-                        // Make sure selection decoration is visible
                         selectedDecoration: BoxDecoration(
                           color: Colors.green,
                           shape: BoxShape.rectangle,

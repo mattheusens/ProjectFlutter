@@ -75,6 +75,13 @@ class NavigationSideBar extends StatelessWidget {
                   selected:
                       ModalRoute.of(context)?.settings.name == '/categories',
                 ),
+                NavItem(
+                  icon: Icons.schedule,
+                  title: 'My Rents',
+                  route: '/my-rents',
+                  selected:
+                      ModalRoute.of(context)?.settings.name == '/my-rents',
+                ),
 
                 const Padding(
                   padding: EdgeInsets.only(left: 16.0, top: 16.0, bottom: 8.0),
