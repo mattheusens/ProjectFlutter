@@ -334,7 +334,6 @@ class _CalenderScreen extends State<CalenderScreen> {
                   12,
                 );
 
-                // Check if the day is already rented
                 final isRented = rentedDates.any(
                   (d) => isSameDay(d, normalizedDay),
                 );
@@ -353,7 +352,6 @@ class _CalenderScreen extends State<CalenderScreen> {
                     }
                   }
                 } else {
-                  // In Add mode, only allow selection if the day is not rented
                   if (!isRented) {
                     if (_customSelectedDays.any(
                       (d) => isSameDay(d, normalizedDay),
@@ -492,18 +490,6 @@ class _CalenderScreen extends State<CalenderScreen> {
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 8),
-              // This appears to be a duplicate UI element - consider removing it
-              Text(
-                _isDeleteMode
-                    ? 'Delete mode - Selected: ${_daysToDelete.length}'
-                    : 'Add mode - Selected: ${_customSelectedDays.length}',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: _isDeleteMode ? Colors.red : Colors.green,
-                ),
               ),
               const SizedBox(height: 16),
               ElevatedButton(

@@ -229,24 +229,6 @@ class NavItem extends StatelessWidget {
             color: selected ? Theme.of(context).primaryColor : null,
           ),
         ),
-        trailing:
-            showBadge
-                ? Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: Colors.red,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Text(
-                    '3',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                )
-                : null,
         onTap: () {
           Navigator.pop(context);
           if (route != ModalRoute.of(context)?.settings.name) {
