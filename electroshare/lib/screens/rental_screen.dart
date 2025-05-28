@@ -32,6 +32,18 @@ class _RentalScreenState extends State<RentalScreen> {
     return [];
   }
 
+  List<DateTime> parseRentedTimestamps(dynamic list) {
+    if (list is List) {
+      return list.map<DateTime>((entry) {
+        if (entry is Map<String, dynamic> && entry.containsKey('date')) {
+          return (entry['date'] as Timestamp).toDate();
+        }
+        return DateTime.now(); // fallback
+      }).toList();
+    }
+    return [];
+  }
+
   Future<void> _fetchMyDevices() async {
     setState(() => _isLoading = true);
 
@@ -52,7 +64,7 @@ class _RentalScreenState extends State<RentalScreen> {
               'id': doc.id,
               'title': data['title'] ?? 'No Title',
               'availability': parseTimestamps(data['availability']),
-              'rented': parseTimestamps(data['rented']),
+              'rented': parseRentedTimestamps(data['rented']),
             };
           }).toList();
 
@@ -86,46 +98,80 @@ class _RentalScreenState extends State<RentalScreen> {
         }).toList();
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rentals'),
-        centerTitle: true,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: SizedBox(
-              width: 160,
-              child: DropdownButton<String>(
-                isExpanded: true,
-                hint: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                    'Select Device',
-                    style: TextStyle(color: Colors.black),
-                  ),
-                ),
-                dropdownColor: Colors.white,
-                value: _selectedOption,
-                icon: const Icon(Icons.arrow_drop_down, color: Colors.black),
-                style: const TextStyle(color: Colors.black),
-                onChanged: (String? newValue) {
-                  setState(() {
-                    _selectedOption = newValue;
-                  });
-                },
-                items: dropdownItems,
-              ),
-            ),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Rentals'), centerTitle: true),
       drawer: const NavigationSideBar(),
       body:
           _isLoading
               ? const Center(child: CircularProgressIndicator())
-              : CalenderScreen(
-                devicesList: _devicesList,
-                selectedDeviceTitle: _selectedOption,
-                onAvailabilityUpdated: _fetchMyDevices,
+              : Column(
+                children: [
+                  // Dropdown section at the top of the main content
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16.0),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[50],
+                      border: Border(
+                        bottom: BorderSide(
+                          color: Colors.grey[300]!,
+                          width: 1.0,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Text(
+                          'Select Device: ',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              border: Border.all(color: Colors.grey[300]!),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: DropdownButton<String>(
+                              isExpanded: true,
+                              hint: const Text(
+                                'Choose a device',
+                                style: TextStyle(color: Colors.black54),
+                              ),
+                              value: _selectedOption,
+                              icon: const Icon(
+                                Icons.arrow_drop_down,
+                                color: Colors.black54,
+                              ),
+                              style: const TextStyle(color: Colors.black),
+                              underline:
+                                  const SizedBox(), // Remove default underline
+                              onChanged: (String? newValue) {
+                                setState(() {
+                                  _selectedOption = newValue;
+                                });
+                              },
+                              items: dropdownItems,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Calendar section
+                  Expanded(
+                    child: CalenderScreen(
+                      devicesList: _devicesList,
+                      selectedDeviceTitle: _selectedOption,
+                      onAvailabilityUpdated: _fetchMyDevices,
+                    ),
+                  ),
+                ],
               ),
     );
   }
@@ -289,6 +335,18 @@ class _CalenderScreen extends State<CalenderScreen> {
           return entry.toDate();
         }
         return DateTime.now();
+      }).toList();
+    }
+    return [];
+  }
+
+  List<DateTime> parseRentedTimestamps(dynamic list) {
+    if (list is List) {
+      return list.map<DateTime>((entry) {
+        if (entry is Map<String, dynamic> && entry.containsKey('date')) {
+          return (entry['date'] as Timestamp).toDate();
+        }
+        return DateTime.now(); // fallback
       }).toList();
     }
     return [];
